@@ -18,12 +18,19 @@
     NOTE: strict mode: every global variables should be prefixed by '_'
 --]]
 
-package.path = package.path .. ';./var/?.lua'
 local lu = require('luaunit')
 lu.LuaUnit:setOutputType('JUNIT')
 lu.LuaUnit.fname = "var/jUnitResults.xml"
 
+-- Use our own print function to redirect it to a file the standard output
+_standard_print = print
+print = function(...)
+	io.write(... .. '\n')
+	_standard_print(...)
+end
+
 _AFT = {
+	exit = {0, code},
 	context = _ctx,
 	tests_list = {},
 	event_history = false,
@@ -36,6 +43,15 @@ end
 
 function _AFT.setJunitFile(filePath)
 	lu.LuaUnit.fname = filePath
+end
+
+function _AFT.setOutputFile(filePath)
+	local file = assert(io.open(filePath, "w+"))
+	io.output(file)
+end
+
+function _AFT.exitAtEnd(code)
+	_AFT.exit = {1, code}
 end
 
 --[[
@@ -52,11 +68,7 @@ end
 ]]
 
 function _AFT.addEventToMonitor(eventName, callback)
-	_AFT.monitored_events[eventName] = { cb = callback }
-end
-
-function _AFT.addLogToMonitor(api, type, message, callback)
-	_AFT.monitored_events[message] = { api = api, type = type, cb = callback }
+	_AFT.monitored_events[eventName] = { cb = callback, receivedCount = 0 }
 end
 
 function _AFT.incrementCount(dict)
@@ -125,6 +137,20 @@ end
   Assert and test functions about the event part.
 ]]
 
+function _AFT.assertEvtNotReceived(eventName)
+	local count = 0
+	if _AFT.monitored_events[eventName].receivedCount then
+		count = _AFT.monitored_events[eventName].receivedCount
+	end
+
+	_AFT.assertIsTrue(count == 0, "Event '".. eventName .."' received but it shouldn't")
+
+	if _AFT.monitored_events[eventName].cb then
+		local data_n = #_AFT.monitored_events[eventName].data
+		_AFT.monitored_events[eventName].cb(eventName, _AFT.monitored_events[eventName].data[data_n])
+	end
+end
+
 function _AFT.assertEvtReceived(eventName)
 	local count = 0
 	if _AFT.monitored_events[eventName].receivedCount then
@@ -137,6 +163,13 @@ function _AFT.assertEvtReceived(eventName)
 		local data_n = #_AFT.monitored_events[eventName].data
 		_AFT.monitored_events[eventName].cb(eventName, _AFT.monitored_events[eventName].data[data_n])
 	end
+end
+
+function _AFT.testEvtNotReceived(testName, eventName, timeout)
+	table.insert(_AFT.tests_list, {testName, function()
+		if timeout then sleep(timeout) end
+		_AFT.assertEvtNotReceived(eventName)
+	end})
 end
 
 function _AFT.testEvtReceived(testName, eventName, timeout)
@@ -207,7 +240,7 @@ function _AFT.testVerbError(testName, api, verb, args, cb)
 	end})
 end
 
-function _AFT.testCustom(testName, testFunction)
+function _AFT.describe(testName, testFunction)
 	table.insert(_AFT.tests_list, {testName, function()
 		testFunction()
 	end})
@@ -240,46 +273,8 @@ local luaunit_list_of_assert = {
 	'assertErrorMsgMatches',
 	'assertIs',
 	'assertNotIs',
-	'wrapFunctions',
-	'wrapFunctions',
 
 	-- type assertions: assertIsXXX -> assert_is_xxx
-	'assertIsNumber',
-	'assertIsString',
-	'assertIsTable',
-	'assertIsBoolean',
-	'assertIsNil',
-	'assertIsTrue',
-	'assertIsFalse',
-	'assertIsNaN',
-	'assertIsInf',
-	'assertIsPlusInf',
-	'assertIsMinusInf',
-	'assertIsPlusZero',
-	'assertIsMinusZero',
-	'assertIsFunction',
-	'assertIsThread',
-	'assertIsUserdata',
-
-	-- type assertions: assertIsXXX -> assertXxx
-	'assertIsNumber',
-	'assertIsString',
-	'assertIsTable',
-	'assertIsBoolean',
-	'assertIsNil',
-	'assertIsTrue',
-	'assertIsFalse',
-	'assertIsNaN',
-	'assertIsInf',
-	'assertIsPlusInf',
-	'assertIsMinusInf',
-	'assertIsPlusZero',
-	'assertIsMinusZero',
-	'assertIsFunction',
-	'assertIsThread',
-	'assertIsUserdata',
-
-	-- type assertions: assertIsXXX -> assert_xxx (luaunit v2 compat)
 	'assertIsNumber',
 	'assertIsString',
 	'assertIsTable',
@@ -314,52 +309,6 @@ local luaunit_list_of_assert = {
 	'assertNotIsFunction',
 	'assertNotIsThread',
 	'assertNotIsUserdata',
-
-	-- type assertions: assertNotIsXXX -> assertNotXxx (luaunit v2 compat)
-	'assertNotIsNumber',
-	'assertNotIsString',
-	'assertNotIsTable',
-	'assertNotIsBoolean',
-	'assertNotIsNil',
-	'assertNotIsTrue',
-	'assertNotIsFalse',
-	'assertNotIsNaN',
-	'assertNotIsInf',
-	'assertNotIsPlusInf',
-	'assertNotIsMinusInf',
-	'assertNotIsPlusZero',
-	'assertNotIsMinusZero',
-	'assertNotIsFunction',
-	'assertNotIsThread',
-	'assertNotIsUserdata',
-
-	-- type assertions: assertNotIsXXX -> assert_not_xxx
-	'assertNotIsNumber',
-	'assertNotIsString',
-	'assertNotIsTable',
-	'assertNotIsBoolean',
-	'assertNotIsNil',
-	'assertNotIsTrue',
-	'assertNotIsFalse',
-	'assertNotIsNaN',
-	'assertNotIsInf',
-	'assertNotIsPlusInf',
-	'assertNotIsMinusInf',
-	'assertNotIsPlusZero',
-	'assertNotIsMinusZero',
-	'assertNotIsFunction',
-	'assertNotIsThread',
-	'assertNotIsUserdata',
-
-	-- all assertions with Coroutine duplicate Thread assertions
-	'assertIsThread',
-	'assertIsThread',
-	'assertIsThread',
-	'assertIsThread',
-	'assertNotIsThread',
-	'assertNotIsThread',
-	'assertNotIsThread',
-	'assertNotIsThread',
 }
 
 local luaunit_list_of_functions = {
@@ -368,20 +317,19 @@ local luaunit_list_of_functions = {
 
 local _AFT_list_of_funcs = {
 	-- AF Binder generic assertions
+	{ 'addEventToMonitor', 'resetEventReceivedCount' },
 	{ 'assertVerb',      'assertVerbStatusSuccess' },
 	{ 'assertVerb',      'assertVerbResponseEquals' },
 	{ 'assertVerb',      'assertVerbCb' },
 	{ 'assertVerbError', 'assertVerbStatusError' },
 	{ 'assertVerbError', 'assertVerbResponseEqualsError' },
 	{ 'assertVerbError', 'assertVerbCbError' },
-	{ 'assertEvtReceived', 'assertLogReceived' },
 	{ 'testVerb',      'testVerbStatusSuccess' },
 	{ 'testVerb',      'testVerbResponseEquals' },
 	{ 'testVerb',      'testVerbCb' },
 	{ 'testVerbError', 'testVerbStatusError' },
 	{ 'testVerbError', 'testVerbResponseEqualsError' },
 	{ 'testVerbError', 'testVerbCbError' },
-	{ 'testEvtReceived', 'testLogReceived' },
 }
 
 -- Import all luaunit assertion function to _AFT object
@@ -404,11 +352,27 @@ end
 
 function _launch_test(context, args)
 	_AFT.context = context
+
+	_AFT.setOutputFile("var/test_results.log")
 	AFB:servsync(_AFT.context, "monitor", "set", { verbosity = "debug" })
-	AFB:servsync(_AFT.context, "monitor", "trace", { add = { api = args.trace, request = "vverbose", daemon = "vverbose", event = "push_after" }})
-	for _,f in pairs(args.files) do
-		dofile('var/'..f)
+	AFB:servsync(_AFT.context, "monitor", "trace", { add = { api = args.trace, request = "vverbose", event = "push_after" }})
+	if args.files and type(args.files) == 'table' then
+		for _,f in pairs(args.files) do
+			dofile('var/'..f)
+		end
+	elseif type(args.files) == 'string' then
+		dofile('var/'..args.files)
 	end
 
+	AFB:success(_AFT.context, { info = "Launching tests"})
 	lu.LuaUnit:runSuiteByInstances(_AFT.tests_list)
+
+	local success ="Success : "..tostring(lu.LuaUnit.result.passedCount)
+	local failures="Failures : "..tostring(lu.LuaUnit.result.testCount-lu.LuaUnit.result.passedCount)
+
+	local evtHandle = AFB:evtmake(_AFT.context, 'results')
+	AFB:subscribe(_AFT.context,evtHandle)
+	AFB:evtpush(_AFT.context,evtHandle,{info = success.." "..failures})
+
+	if _AFT.exit[1] == 1 then os.exit(_AFT.exit[2]) end
 end

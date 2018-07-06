@@ -21,16 +21,17 @@
 #include <string.h>
 #include <time.h>
 
-#include "test-binding.h"
-
+#include "aft.h"
+#include "mapis.h"
 // default api to print log when apihandle not avaliable
 afb_dynapi *AFB_default;
 
 // Config Section definition
 static CtlSectionT ctrlSections[] = {
 	{.key = "resources", .loadCB = PluginConfig},
-	{.key = "onload", .loadCB = OnloadConfig},
+	{.key = "testVerb", .loadCB = ControlConfig},
 	{.key = "events", .loadCB = EventConfig},
+	{.key = "mapis", .loadCB = MapiConfig},
 	{.key = NULL}
 };
 
@@ -40,13 +41,19 @@ static void ctrlapi_ping(AFB_ReqT request) {
 	count++;
 	AFB_ReqNotice(request, "Controller:ping count=%d", count);
 	AFB_ReqSuccess(request, json_object_new_int(count), NULL);
+}
 
-	return;
+static void ctrlapi_exit(AFB_ReqT request) {
+
+	AFB_ReqNotice(request, "Exiting...");
+	AFB_ReqSuccess(request, NULL, NULL);
+	exit(0);
 }
 
 static AFB_ApiVerbs CtrlApiVerbs[] = {
 	/* VERB'S NAME         FUNCTION TO CALL         SHORT DESCRIPTION */
 	{.verb = "ping", .callback = ctrlapi_ping, .info = "ping test for API"},
+	{.verb = "exit", .callback = ctrlapi_exit, .info = "Exit test"},
 	{.verb = NULL} /* marker for end of the array */
 };
 
@@ -63,10 +70,12 @@ static int CtrlLoadStaticVerbs(afb_dynapi *apiHandle, AFB_ApiVerbs *verbs) {
 };
 
 static int CtrlInitOneApi(AFB_ApiT apiHandle) {
-	int err = 0;
-	AFB_default = apiHandle; // hugely hack to make all V2 AFB_DEBUG to work in fileutils
+	// Hugely hack to make all V2 AFB_DEBUG to work in fileutils
+	AFB_default = apiHandle;
 
-	return err;
+	CtlConfigT *ctrlConfig = afb_dynapi_get_userdata(apiHandle);
+
+	return CtlConfigExec(apiHandle, ctrlConfig);
 }
 
 // next generation dynamic API-V3 mode
@@ -111,7 +120,7 @@ int afbBindingVdyn(afb_dynapi *apiHandle) {
 	if (!dirList)
 		dirList = CONTROL_CONFIG_PATH;
 
-	configPath = CtlConfigSearch(apiHandle, dirList, "");
+	configPath = CtlConfigSearch(apiHandle, dirList, "aft");
 	if (!configPath) {
 		AFB_ApiError(apiHandle, "CtlPreInit: No %s* config found in %s ", GetBinderName(), dirList);
 		return ERROR;
@@ -136,10 +145,9 @@ int afbBindingVdyn(afb_dynapi *apiHandle) {
 	AFB_ApiNotice(apiHandle, "Controller API='%s' info='%s'", ctrlConfig->api,
 			ctrlConfig->info);
 
-	err = wrap_json_pack(&resourcesJ, "{s[{ss, ss, ss, s[s]}]}", "resources",
+	err = wrap_json_pack(&resourcesJ, "{s[{ss, ss, ss}]}", "resources",
 		"uid", "AFT",
 		"info", "LUA Binder test framework",
-		"spath", "var/",
 		"libs", "aft.lua" );
 	err += wrap_json_pack(&eventsJ, "{s[{ss, ss}]}", "events",
 		"uid", "monitor/trace",
@@ -154,12 +162,6 @@ int afbBindingVdyn(afb_dynapi *apiHandle) {
 
 	// create one API per config file (Pre-V3 return code ToBeChanged)
 	status = afb_dynapi_new_api(apiHandle, ctrlConfig->api, ctrlConfig->info, 1, CtrlLoadOneApi, ctrlConfig);
-
-	err = CtlConfigExec(apiHandle, ctrlConfig);
-	if(err) {
-		AFB_ApiError(apiHandle, "Error at CtlConfigExec step");
-		return err;
-	}
 
 	return status;
 }
