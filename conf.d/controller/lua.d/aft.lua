@@ -252,15 +252,32 @@ function _AFT.testVerbError(testName, api, verb, args, cb)
 	end})
 end
 
-function _AFT.describe(testName, testFunction)
+function _AFT.describe(testName, testFunction, setUp, tearDown)
+	sanitizedTestName = "test"..tostring(testName)
+	if _AFT.beforeEach then local b = _AFT.beforeEach() end
+	if _AFT.afterEach then local a = _AFT.afterEach() end
+	local aTest = {}
+
+	function aTest:sanitizedTestName() testFunction() end
+	function aTest:setUp()
+		if type(setUp) == 'function' then setUp() end
+		b()
+	end
+	function aTest:tearDown()
+		a()
+		if type(tearDown) == 'function' then tearDown() end
+	end
+
 	table.insert(_AFT.tests_list, {testName, function()
-		if _AFT.beforeEach then _AFT.beforeEach() end
-		testFunction()
-		if _AFT.afterEach then _AFT.afterEach() end
+		if type(testFunction) == 'function' then
+			testFunction()
+		else
+			print('# ERROR: Test '.. testName .. ' is note defined as a function.')
+		end
 	end})
 end
 
-function _AFT.setbeforeEach(beforeEachTestFunction)
+function _AFT.setBeforeEach(beforeEachTestFunction)
 	if type(beforeEachTestFunction) == "function" then
 		_AFT.beforeEach = beforeEachTestFunction
 	else
@@ -276,7 +293,7 @@ function _AFT.setAfterEach(afterEachTestFunction)
 	end
 end
 
-function _AFT.setBefore(beforeAllTestsFunctions)
+function _AFT.setBeforeAll(beforeAllTestsFunctions)
 	if type(beforeAllTestsFunctions) == "function" then
 		_AFT.beforeAll = beforeAllTestsFunctions
 	else
@@ -284,7 +301,7 @@ function _AFT.setBefore(beforeAllTestsFunctions)
 	end
 end
 
-function _AFT.setAfter(afterAllTestsFunctions)
+function _AFT.setAfterAll(afterAllTestsFunctions)
 	if type(afterAllTestsFunctions) == "function" then
 		_AFT.afterAll = afterAllTestsFunctions
 	else
@@ -399,6 +416,8 @@ end
 function _launch_test(context, args)
 	_AFT.context = context
 
+	-- Prepare the tests execution configuring the monitoring and loading
+	-- lua test files to execute in the Framework.
 	_AFT.setOutputFile("var/test_results.log")
 	AFB:servsync(_AFT.context, "monitor", "set", { verbosity = "debug" })
 	AFB:servsync(_AFT.context, "monitor", "trace", { add = { api = args.trace, request = "vverbose", event = "push_after" }})
@@ -410,17 +429,31 @@ function _launch_test(context, args)
 		dofile('var/'..args.files)
 	end
 
-	AFB:success(_AFT.context, { info = "Launching tests"})
-	if _AFT.beforeAll then _AFT.beforeAll() end
-	lu.LuaUnit:runSuiteByInstances(_AFT.tests_list)
-	if _AFT.afterAll then _AFT.afterAll() end
+	-- Execute the test within a context if given. We assume that the before
+	-- function success returning '0' else we abort the whole test procedure
+	if _AFT.beforeAll then
+		if _AFT.beforeAll() == 0 then
+			AFB:success(_AFT.context, { info = "Launching tests"})
+			lu.LuaUnit:runSuiteByInstances(_AFT.tests_list)
 
-	local success ="Success : "..tostring(lu.LuaUnit.result.passedCount)
-	local failures="Failures : "..tostring(lu.LuaUnit.result.testCount-lu.LuaUnit.result.passedCount)
+			local success ="Success : "..tostring(lu.LuaUnit.result.passedCount)
+			local failures="Failures : "..tostring(lu.LuaUnit.result.testCount-lu.LuaUnit.result.passedCount)
 
-	local evtHandle = AFB:evtmake(_AFT.context, 'results')
-	AFB:subscribe(_AFT.context,evtHandle)
-	AFB:evtpush(_AFT.context,evtHandle,{info = success.." "..failures})
+			local evtHandle = AFB:evtmake(_AFT.context, 'results')
+			AFB:subscribe(_AFT.context,evtHandle)
+			AFB:evtpush(_AFT.context,evtHandle,{info = success.." "..failures})
+		else
+			AFB:fail(_AFT.context, { info = "Can't set the context to execute the tests correctly. Look at the log and retry."})
+		end
+	end
+
+	-- Keep the context unset function to be executed after all no matter if
+	-- tests have been executed or not.
+	if _AFT.afterAll then
+		if _AFT.afterAll() ~= 0 then
+			print('Unsetting the tests context failed.')
+		end
+	end
 
 	if _AFT.exit[1] == 1 then os.exit(_AFT.exit[2]) end
 end
