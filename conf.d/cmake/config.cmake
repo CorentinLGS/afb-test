@@ -20,7 +20,7 @@
 # ------------------
 set(PROJECT_NAME afb-test)
 set(PROJECT_VERSION "5.0")
-set(PROJECT_PRETTY_NAME "Binding to test other bindings")
+set(PROJECT_PRETTY_NAME "Application Framework Test")
 set(PROJECT_DESCRIPTION "Binding used to test other binding")
 set(PROJECT_URL "https://github.com/iotbzh/afb-test")
 set(PROJECT_ICON "icon.png")
@@ -76,7 +76,7 @@ set (PKG_REQUIRED_LIST
 # Prefix path where will be installed the files
 # Default: /usr/local (need root permission to write in)
 # ------------------------------------------------------
-set(CMAKE_INSTALL_PREFIX /opt/AGL)
+set(INSTALL_PREFIX /opt/AGL CACHE PATH "INSTALL PREFIX PATH")
 
 # Customize link option
 # -----------------------------
@@ -133,8 +133,8 @@ add_definitions(-DUSE_API_DYN=1 -DCONTROL_SUPPORT_LUA)
 
 # (BUG!!!) as PKG_CONFIG_PATH does not work [should be an env variable]
 # ---------------------------------------------------------------------
-set(CMAKE_PREFIX_PATH ${CMAKE_INSTALL_PREFIX}/lib64/pkgconfig ${CMAKE_INSTALL_PREFIX}/lib/pkgconfig)
-set(LD_LIBRARY_PATH ${CMAKE_INSTALL_PREFIX}/lib64 ${CMAKE_INSTALL_PREFIX}/lib)
+set(CMAKE_PREFIX_PATH ${CMAKE_INSTALL_PREFIX}/lib64/pkgconfig ${CMAKE_INSTALL_PREFIX}/lib/pkgconfig CACHE PATH "Prefix path")
+set(LD_LIBRARY_PATH ${CMAKE_INSTALL_PREFIX}/lib64 ${CMAKE_INSTALL_PREFIX}/lib CACHE STRING "List of directory where search for libraries")
 
 # Optional location for config.xml.in
 # -----------------------------------
@@ -193,7 +193,7 @@ set(AFB_REMPORT "1234" CACHE PATH "Default binder listening port")
 
 # Print a helper message when every thing is finished
 # ----------------------------------------------------
-set(CLOSING_MESSAGE "Typical binding launch: afb-daemon --name afbd-${PROJECT_NAME} --port=${AFB_REMPORT} --workdir=package --ldpaths=/opt/AGL/lib64/afb:lib --token=\"${AFB_TOKEN}\" --tracereq=common --verbose")
+set(CLOSING_MESSAGE "Typical binding launch: afb-daemon --name afbd-${PROJECT_NAME} --port=${AFB_REMPORT} --workdir=package --ldpaths=/opt/AGL/lib64/afb:lib --token=\"${AFB_TOKEN}\"")
 set(PACKAGE_MESSAGE "Install widget file using in the target : afm-util install ${PROJECT_NAME}.wgt")
 
 # Optional schema validator about now only XML, LUA and JSON
